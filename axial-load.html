@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Axial Stress Visualizer</title>
+    <!-- KaTeX -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/contrib/auto-render.min.js" 
+            onload="renderMathInElement(document.body);"></script>
+  <style>
+    :root {
+      --bg-color: #f4f7f6;
+      --card-bg: #ffffff;
+      --accent: #2563eb;
+      --text: #1e293b;
+    }
+
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text);
+      margin: 0;
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+    }
+
+    .container {
+      max-width: 900px;
+      width: 100%;
+      background: var(--card-bg);
+      padding: 25px;
+      border-radius: 12px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+    }
+
+    h1 {
+      margin-top: 0;
+      color: var(--accent);
+      font-size: 1.5rem;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      gap: 20px;
+      margin-top: 20px;
+    }
+
+    @media (max-width: 768px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .controls {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      background: #f8fafc;
+      padding: 15px;
+      border-radius: 8px;
+    }
+
+    .input-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    label {
+      font-size: 0.85rem;
+      font-weight: 600;
+    }
+
+    input, select {
+      padding: 8px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 0.9rem;
+    }
+
+    .results {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 2px solid #e2e8f0;
+    }
+
+    .result-item {
+      font-size: 0.9rem;
+      margin-bottom: 8px;
+    }
+
+    .result-value {
+      font-weight: bold;
+      color: var(--accent);
+    }
+
+    canvas {
+      width: 100%;
+      height: 350px;
+      background: #0f172a;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h1>Axial load</h1>
+  
+  <div class="layout">
+    <!-- Controls Panel -->
+    <div class="controls">
+      <div class="input-group">
+        <label for="force">Axial Force (\(P\)) [kN]:</label>
+        <input type="number" id="force" value="50" step="5">
+        <small style="color: #64748b;">(Positive = Tension, Negative = Compression)</small>
+      </div>
+
+      <div class="input-group">
+        <label for="length">Length (\(L\)) [m]:</label>
+        <input type="number" id="length" value="2" min="0.1" step="0.1">
+      </div>
+
+      <div class="input-group">
+        <label for="area">Cross-Sectional Area (\(A\)) [cm²]:</label>
+        <input type="number" id="area" value="10" min="0.1" step="0.5">
+      </div>
+
+      <div class="input-group">
+        <label for="material">Material (Modulus \(E\)):</label>
+        <select id="material">
+          <option value="200">Structural Steel (200 GPa)</option>
+          <option value="70">Aluminum (70 GPa)</option>
+          <option value="110">Titanium (110 GPa)</option>
+          <option value="25">Concrete (25 GPa)</option>
+        </select>
+      </div>
+
+      <!-- Real-time Results Panel -->
+      <div class="results">
+        <div class="result-item">
+          Normal Stress ($\sigma$): <span id="res-stress" class="result-value">0</span> MPa
+        </div>
+        <div class="result-item">
+          Elongation/Deflection ($\delta$): <span id="res-def" class="result-value">0</span> mm
+        </div>
+        <div class="result-item">
+          State: <span id="res-state" class="result-value">Tension</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Canvas Simulation Area -->
+    <div>
+      <canvas id="simCanvas"></canvas>
+    </div>
+  </div>
+</div>
+
+<script>
+  const canvas = document.getElementById('simCanvas');
+  const ctx = canvas.getContext('2d');
+
+  // Handle high-DPI scaling and viewport resizing
+  function resizeCanvas() {
+    canvas.width = canvas.clientWidth;
+    canvas.height = canvas.clientHeight;
+  }
+
+  function calculateAndDraw() {
+    resizeCanvas();
+
+    // Get values from input fields
+    const P_kN = parseFloat(document.getElementById('force').value) || 0;
+    const L_m = parseFloat(document.getElementById('length').value) || 1;
+    const A_cm2 = parseFloat(document.getElementById('area').value) || 1;
+    const E_GPa = parseFloat(document.getElementById('material').value);
+
+    // Convert inputs to SI Units (N, m, Pa)
+    const P = P_kN * 1000;  // kN to N
+    const A = A_cm2 * 1e-4; // cm² to m²
+    const E = E_GPa * 1e9;  // GPa to Pa
+
+    // Mechanical Calculations
+    // Normal Stress: sigma = P / A (Pa -> converted to MPa)
+    const stress_Pa = P / A;
+    const stress_MPa = stress_Pa / 1e6;
+
+    // Deformation (Hooke's Law): delta = (P * L) / (A * E) (m -> converted to mm)
+    const delta_m = (P * L_m) / (A * E);
+    const delta_mm = delta_m * 1000;
+
+    // Update UI Results Text
+    document.getElementById('res-stress').innerText = Math.abs(stress_MPa).toFixed(2);
+    document.getElementById('res-def').innerText = Math.abs(delta_mm).toFixed(4);
+    
+    const stateElem = document.getElementById('res-state');
+    if (P_kN > 0) {
+      stateElem.innerText = "Tension";
+      stateElem.style.color = "#ef4444"; // Red for Tension
+    } else if (P_kN < 0) {
+      stateElem.innerText = "Compression";
+      stateElem.style.color = "#3b82f6"; // Blue for Compression
+    } else {
+      stateElem.innerText = "Unloaded";
+      stateElem.style.color = "#64748b"; // Neutral Gray
+    }
+
+    // --- CANVAS RENDERING ---
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    const centerY = canvas.height / 2;
+    const startX = 80; // Fixed boundary starting X coordinate
+
+    // Draw Fixed Wall Support
+    ctx.fillStyle = '#475569';
+    ctx.fillRect(startX - 20, centerY - 100, 20, 200);
+    
+    // Draw Wall Hatch Pattern
+    ctx.strokeStyle = '#94a3b8';
+    ctx.lineWidth = 2;
+    for (let y = centerY - 95; y < centerY + 100; y += 15) {
+      ctx.beginPath();
+      ctx.moveTo(startX - 20, y);
+      ctx.lineTo(startX - 5, y + 10);
+      ctx.stroke();
+    }
+
+    // Dynamic Visual Dimensions
+    // Exaggerate deformation visually for illustrative purposes
+    const visualScaleDef = Math.max(-40, Math.min(40, delta_mm * 500)); 
+    const baseWidth = Math.min(canvas.width - 250, Math.max(150, L_m * 80));
+    const currentWidth = baseWidth + visualScaleDef;
+    
+    // Thickness visually scales with cross-sectional area
+    const currentHeight = Math.min(120, Math.max(20, A_cm2 * 4)); 
+
+    // Dynamic stress color map (Blue = Compression, Red = Tension)
+    const maxStressRef = 200; // Reference maximum stress intensity (200 MPa)
+    const intensity = Math.min(1, Math.abs(stress_MPa) / maxStressRef);
+    
+    let barColor;
+    if (P_kN >= 0) {
+      // Red gradient for Tension
+      barColor = `rgba(${Math.floor(100 + 155 * intensity)}, 100, 100, 0.9)`;
+    } else {
+      // Blue gradient for Compression
+      barColor = `rgba(100, 100, ${Math.floor(100 + 155 * intensity)}, 0.9)`;
+    }
+
+    // Draw Structural Bar
+    ctx.fillStyle = barColor;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.fillRect(startX, centerY - currentHeight / 2, currentWidth, currentHeight);
+    ctx.strokeRect(startX, centerY - currentHeight / 2, currentWidth, currentHeight);
+
+    // Draw Axial Load Vector Arrow
+    if (Math.abs(P_kN) > 0) {
+      const arrowStartX = startX + currentWidth;
+      const arrowLength = Math.min(80, Math.max(30, Math.abs(P_kN) * 0.8));
+      const direction = P_kN > 0 ? 1 : -1; // 1 = outward (Tension), -1 = inward (Compression)
+
+      ctx.strokeStyle = P_kN > 0 ? '#ef4444' : '#3b82f6';
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.lineWidth = 4;
+
+      // Draw Arrow Line
+      ctx.beginPath();
+      ctx.moveTo(arrowStartX, centerY);
+      ctx.lineTo(arrowStartX + (arrowLength * direction), centerY);
+      ctx.stroke();
+
+      // Draw Arrowhead
+      ctx.beginPath();
+      const headX = arrowStartX + (arrowLength * direction);
+      ctx.moveTo(headX, centerY);
+      ctx.lineTo(headX - (10 * direction), centerY - 8);
+      ctx.lineTo(headX - (10 * direction), centerY + 8);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  // Event listeners for real-time recalculation
+  document.querySelectorAll('input, select').forEach(input => {
+    input.addEventListener('input', calculateAndDraw);
+  });
+
+  // Render on page load and window resize
+  window.addEventListener('resize', calculateAndDraw);
+  calculateAndDraw();
+</script>
+
+</body>
+</html>
