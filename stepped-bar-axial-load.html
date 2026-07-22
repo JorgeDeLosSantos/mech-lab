@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Section Shaft Calculator - Circular Shafts</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --bg: #f8fafc;
+            --surface: #ffffff;
+            --text: #0f172a;
+            --border: #e2e8f0;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 950px;
+            margin: 0 auto;
+            background: var(--surface);
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 { margin-top: 0; color: var(--primary); }
+        h2 { margin-top: 20px; font-size: 1.25rem; }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            font-size: 0.875rem;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        input {
+            padding: 8px 12px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            font-size: 1rem;
+        }
+
+        .section-card {
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 16px;
+            background: #fff;
+        }
+
+        .section-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .section-inputs {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 12px;
+        }
+
+        .btn {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 16px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+        }
+
+        .btn:hover { opacity: 0.9; }
+
+        .btn-danger {
+            background-color: #ef4444;
+            padding: 6px 12px;
+            font-size: 0.875rem;
+        }
+
+        .visualizer-container {
+            margin-top: 24px;
+            padding: 16px;
+            background: #f1f5f9;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            text-align: center;
+        }
+
+        .visualizer-container svg {
+            width: 100%;
+            height: 220px;
+            background: #ffffff;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+        }
+
+        .results {
+            margin-top: 24px;
+            border-top: 2px solid var(--border);
+            padding-top: 16px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 12px;
+        }
+
+        th, td {
+            border: 1px solid var(--border);
+            padding: 10px;
+            text-align: left;
+        }
+
+        th { background-color: #f1f5f9; }
+
+        .total-box {
+            margin-top: 16px;
+            padding: 16px;
+            background: #ecfdf5;
+            border: 1px solid #a7f3d0;
+            border-radius: 8px;
+            font-size: 1.2rem;
+            font-weight: bold;
+            color: #065f46;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Stepped bar under axial load</h1>
+
+    <h2>Sections</h2>
+    <div id="sectionsContainer"></div>
+
+    <button class="btn" onclick="addSection()">+ Add Section</button>
+    <button class="btn" style="background-color: #10b981;" onclick="calculate()">Calculate Results</button>
+
+    <!-- Visualizer Diagram -->
+    <div class="visualizer-container" id="visualizerSection" style="display: none;">
+        <h2>Stepped Bar Diagram</h2>
+        <svg id="shaftSvg"></svg>
+    </div>
+
+    <!-- Results Table -->
+    <div class="results" id="resultsSection" style="display: none;">
+        <h2>Results</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Section</th>
+                    <th>Load (N)</th>
+                    <th>Diameter (mm)</th>
+                    <th>Area (mm²)</th>
+                    <th>Stress (MPa)</th>
+                    <th>Strain (ε)</th>
+                    <th>Deformation (mm)</th>
+                </tr>
+            </thead>
+            <tbody id="resultsTableBody"></tbody>
+        </table>
+
+        <div class="total-box" id="totalResult"></div>
+    </div>
+</div>
+
+<script>
+    let sectionCount = 0;
+
+    // Adds a new input section card
+    function addSection() {
+        sectionCount++;
+        const container = document.getElementById('sectionsContainer');
+        const card = document.createElement('div');
+        card.className = 'section-card';
+        card.id = `section-${sectionCount}`;
+        
+        card.innerHTML = `
+            <div class="section-header">
+                <strong>Section ${sectionCount}</strong>
+                <button class="btn btn-danger" onclick="removeSection(${sectionCount})">Remove</button>
+            </div>
+            <div class="section-inputs">
+                <div class="input-group">
+                    <label>Axial Load P (N)</label>
+                    <input type="number" class="section-force" value="50000" step="any">
+                    <small style="font-size: 0.75rem; color: #64748b;">(+) Tens / (-) Comp</small>
+                </div>
+                <div class="input-group">
+                    <label>Diameter D (mm)</label>
+                    <input type="number" class="diameter" value="25" min="0.001" step="any">
+                </div>
+                <div class="input-group">
+                    <label>Length L (mm)</label>
+                    <input type="number" class="length" value="300" min="0.001" step="any">
+                </div>
+                <div class="input-group">
+                    <label>Modulus E (GPa)</label>
+                    <input type="number" class="modulus" value="200" min="0.001" step="any">
+                </div>
+            </div>
+        `;
+        container.appendChild(card);
+    }
+
+    function removeSection(id) {
+        const elem = document.getElementById(`section-${id}`);
+        if (elem) elem.remove();
+    }
+
+    // Calculates stress and deformation based on circular sections
+    function calculate() {
+        const cards = document.querySelectorAll('.section-card');
+        if (cards.length === 0) {
+            alert('Please add at least one section to the shaft.');
+            return;
+        }
+
+        const tbody = document.getElementById('resultsTableBody');
+        tbody.innerHTML = '';
+
+        let totalDelta = 0;
+        const shaftData = [];
+
+        cards.forEach((card, index) => {
+            const P = parseFloat(card.querySelector('.section-force').value) || 0; // Force in N
+            const D = parseFloat(card.querySelector('.diameter').value) || 0;     // Diameter in mm
+            const L = parseFloat(card.querySelector('.length').value) || 0;       // Length in mm
+            const E_GPa = parseFloat(card.querySelector('.modulus').value) || 0;  // Modulus in GPa
+            const E = E_GPa * 1000; // N/mm² (MPa)
+
+            // Direct calculation for solid circular cross-section
+            const A = (Math.PI * Math.pow(D, 2)) / 4; // Area in mm²
+
+            // Calculations per section
+            const sigma = A > 0 ? P / A : 0; // Stress (MPa)
+            const epsilon = E > 0 ? sigma / E : 0; // Strain
+            const delta = (A > 0 && E > 0) ? (P * L) / (A * E) : 0; // Deformation (mm)
+
+            totalDelta += delta;
+
+            shaftData.push({
+                index: index + 1,
+                length: L,
+                diameter: D,
+                force: P
+            });
+
+            // Fill table row
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>Section ${index + 1}</td>
+                <td>${P.toFixed(2)}</td>
+                <td>${D.toFixed(2)}</td>
+                <td>${A.toFixed(2)}</td>
+                <td>${sigma.toFixed(2)}</td>
+                <td>${epsilon.toExponential(6)}</td>
+                <td>${delta.toFixed(6)}</td>
+            `;
+            tbody.appendChild(row);
+        });
+
+        document.getElementById('resultsSection').style.display = 'block';
+        document.getElementById('visualizerSection').style.display = 'block';
+        
+        document.getElementById('totalResult').innerHTML = `
+            Total deformation (&delta;<sub>total</sub>): 
+            <strong>${totalDelta.toFixed(6)} mm</strong> 
+        `;
+
+        drawShaft(shaftData);
+    }
+
+    // Draws sections with individual load arrows
+    function drawShaft(sections) {
+        const svg = document.getElementById('shaftSvg');
+        svg.innerHTML = '';
+
+        const svgWidth = svg.clientWidth || 800;
+        const svgHeight = 220;
+        const centerY = svgHeight / 2;
+
+        const totalLength = sections.reduce((sum, s) => sum + s.length, 0);
+        const maxDiameter = Math.max(...sections.map(s => s.diameter));
+
+        if (totalLength <= 0 || maxDiameter <= 0) return;
+
+        const marginX = 60;
+        const availableWidth = svgWidth - (marginX * 2);
+        const availableHeight = svgHeight - 80;
+
+        let currentX = marginX;
+
+        // Center line
+        const axisLine = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        axisLine.setAttribute('x1', 10);
+        axisLine.setAttribute('y1', centerY);
+        axisLine.setAttribute('x2', svgWidth - 10);
+        axisLine.setAttribute('y2', centerY);
+        axisLine.setAttribute('stroke', '#94a3b8');
+        axisLine.setAttribute('stroke-dasharray', '5,5');
+        svg.appendChild(axisLine);
+
+        sections.forEach((sec, idx) => {
+            const rectWidth = (sec.length / totalLength) * availableWidth;
+            const rectHeight = (sec.diameter / maxDiameter) * availableHeight;
+            const rectY = centerY - (rectHeight / 2);
+
+            // Draw Section Block
+            const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+            rect.setAttribute('x', currentX);
+            rect.setAttribute('y', rectY);
+            rect.setAttribute('width', rectWidth);
+            rect.setAttribute('height', rectHeight);
+            rect.setAttribute('fill', idx % 2 === 0 ? '#3b82f6' : '#60a5fa');
+            rect.setAttribute('stroke', '#1d4ed8');
+            rect.setAttribute('stroke-width', '1.5');
+            svg.appendChild(rect);
+
+            // Label Text
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', currentX + (rectWidth / 2));
+            text.setAttribute('y', centerY + 4);
+            text.setAttribute('text-anchor', 'middle');
+            text.setAttribute('fill', '#ffffff');
+            text.setAttribute('font-weight', 'bold');
+            text.setAttribute('font-size', '12px');
+            text.textContent = `S${sec.index}`;
+            svg.appendChild(text);
+
+            // Individual Force Arrow per section
+            const arrowX = currentX + (rectWidth / 2);
+            drawForceArrow(svg, arrowX, rectY - 15, sec.force);
+
+            currentX += rectWidth;
+        });
+    }
+
+    function drawForceArrow(svg, x, y, force) {
+        if (force === 0) return;
+
+        const dir = force > 0 ? 1 : -1; // 1 = right (tension), -1 = left (compression)
+        const arrowLen = 30;
+        const x1 = x - (dir * arrowLen / 2);
+        const x2 = x + (dir * arrowLen / 2);
+
+        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+
+        // Line
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+        line.setAttribute('x1', x1);
+        line.setAttribute('y1', y);
+        line.setAttribute('x2', x2);
+        line.setAttribute('y2', y);
+        line.setAttribute('stroke', '#ef4444');
+        line.setAttribute('stroke-width', '2.5');
+        group.appendChild(line);
+
+        // Arrow tip
+        const arrowhead = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+        const hSize = 5;
+        const points = `${x2},${y} ${x2 - (dir * hSize)},${y - hSize} ${x2 - (dir * hSize)},${y + hSize}`;
+        arrowhead.setAttribute('points', points);
+        arrowhead.setAttribute('fill', '#ef4444');
+        group.appendChild(arrowhead);
+
+        // Text label
+        const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', x);
+        text.setAttribute('y', y - 8);
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('fill', '#ef4444');
+        text.setAttribute('font-size', '11px');
+        text.setAttribute('font-weight', 'bold');
+        text.textContent = `${force} N`;
+        group.appendChild(text);
+
+        svg.appendChild(group);
+    }
+
+    // Initialize first section
+    addSection();
+</script>
+
+</body>
+</html>
