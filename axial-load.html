@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -75,7 +75,7 @@
       font-weight: 600;
     }
 
-    input, select {
+    input {
       padding: 8px;
       border: 1px solid #cbd5e1;
       border-radius: 6px;
@@ -115,38 +115,37 @@
     <!-- Controls Panel -->
     <div class="controls">
       <div class="input-group">
-        <label for="force">Axial Force (\(P\)) [kN]:</label>
-        <input type="number" id="force" value="50" step="5">
+        <label for="force">Axial Force (\(P\)) [N]:</label>
+        <input type="number" id="force" value="20000" step="1000">
         <small style="color: #64748b;">(Positive = Tension, Negative = Compression)</small>
       </div>
 
       <div class="input-group">
-        <label for="length">Length (\(L\)) [m]:</label>
-        <input type="number" id="length" value="2" min="0.1" step="0.1">
+        <label for="length">Length (\(L\)) [mm]:</label>
+        <input type="number" id="length" value="500" min="1" step="10">
       </div>
 
       <div class="input-group">
-        <label for="area">Cross-Sectional Area (\(A\)) [cm²]:</label>
-        <input type="number" id="area" value="10" min="0.1" step="0.5">
+        <label for="diameter">Diameter (\(d\)) [mm]:</label>
+        <input type="number" id="diameter" value="20" min="1" step="0.5">
       </div>
 
       <div class="input-group">
-        <label for="material">Material (Modulus \(E\)):</label>
-        <select id="material">
-          <option value="200">Structural Steel (200 GPa)</option>
-          <option value="70">Aluminum (70 GPa)</option>
-          <option value="110">Titanium (110 GPa)</option>
-          <option value="25">Concrete (25 GPa)</option>
-        </select>
+        <label for="material">Modulus of Elasticity (\(E\)) [GPa]:</label>
+        <input type="number" id="material" value="200" min="0.1" step="1">
       </div>
 
       <!-- Real-time Results Panel -->
       <div class="results">
         <div class="result-item">
-          Normal Stress ($\sigma$): <span id="res-stress" class="result-value">0</span> MPa
+          Normal Stress (\(\sigma\)): <span id="res-stress" class="result-value">0</span> MPa
         </div>
         <div class="result-item">
-          Elongation/Deflection ($\delta$): <span id="res-def" class="result-value">0</span> mm
+          Elongation/Deflection (\(\delta\)): <span id="res-def" class="result-value">0</span> mm
+        </div>
+        <!-- NUEVO CAMPO: Deformación Unitaria -->
+        <div class="result-item">
+          Unit Strain (\(\epsilon\)): <span id="res-strain" class="result-value">0</span> <small style="font-weight: normal; color: #64748b;">(mm/mm)</small>
         </div>
         <div class="result-item">
           State: <span id="res-state" class="result-value">Tension</span>
@@ -175,15 +174,17 @@
     resizeCanvas();
 
     // Get values from input fields
-    const P_kN = parseFloat(document.getElementById('force').value) || 0;
-    const L_m = parseFloat(document.getElementById('length').value) || 1;
-    const A_cm2 = parseFloat(document.getElementById('area').value) || 1;
-    const E_GPa = parseFloat(document.getElementById('material').value);
+    const P_N = parseFloat(document.getElementById('force').value) || 0;
+    const L_mm = parseFloat(document.getElementById('length').value) || 1;
+    const d_mm = parseFloat(document.getElementById('diameter').value) || 1;
+    const E_GPa = parseFloat(document.getElementById('material').value) || 1;
 
     // Convert inputs to SI Units (N, m, Pa)
-    const P = P_kN * 1000;  // kN to N
-    const A = A_cm2 * 1e-4; // cm² to m²
-    const E = E_GPa * 1e9;  // GPa to Pa
+    const P = P_N;                   // Direct in N
+    const L_m = L_mm / 1000;         // mm to m
+    const d_m = d_mm / 1000;         // mm to m
+    const A = (Math.PI * Math.pow(d_m, 2)) / 4; // Area in m² from diameter
+    const E = E_GPa * 1e9;           // GPa to Pa
 
     // Mechanical Calculations
     // Normal Stress: sigma = P / A (Pa -> converted to MPa)
@@ -194,15 +195,23 @@
     const delta_m = (P * L_m) / (A * E);
     const delta_mm = delta_m * 1000;
 
+    // Unit Strain: epsilon = delta / L (adimensional)
+    const strain = delta_m / L_m;
+
     // Update UI Results Text
     document.getElementById('res-stress').innerText = Math.abs(stress_MPa).toFixed(2);
     document.getElementById('res-def').innerText = Math.abs(delta_mm).toFixed(4);
     
+    // Display strain in scientific notation if very small, or formatted decimal
+    document.getElementById('res-strain').innerText = Math.abs(strain) < 0.0001 
+      ? Math.abs(strain).toExponential(4) 
+      : Math.abs(strain).toFixed(6);
+
     const stateElem = document.getElementById('res-state');
-    if (P_kN > 0) {
+    if (P_N > 0) {
       stateElem.innerText = "Tension";
       stateElem.style.color = "#ef4444"; // Red for Tension
-    } else if (P_kN < 0) {
+    } else if (P_N < 0) {
       stateElem.innerText = "Compression";
       stateElem.style.color = "#3b82f6"; // Blue for Compression
     } else {
@@ -236,15 +245,15 @@
     const baseWidth = Math.min(canvas.width - 250, Math.max(150, L_m * 80));
     const currentWidth = baseWidth + visualScaleDef;
     
-    // Thickness visually scales with cross-sectional area
-    const currentHeight = Math.min(120, Math.max(20, A_cm2 * 4)); 
+    // Thickness visually scales with diameter (mm)
+    const currentHeight = Math.min(120, Math.max(10, d_mm * 2)); 
 
     // Dynamic stress color map (Blue = Compression, Red = Tension)
     const maxStressRef = 200; // Reference maximum stress intensity (200 MPa)
     const intensity = Math.min(1, Math.abs(stress_MPa) / maxStressRef);
     
     let barColor;
-    if (P_kN >= 0) {
+    if (P_N >= 0) {
       // Red gradient for Tension
       barColor = `rgba(${Math.floor(100 + 155 * intensity)}, 100, 100, 0.9)`;
     } else {
@@ -260,12 +269,12 @@
     ctx.strokeRect(startX, centerY - currentHeight / 2, currentWidth, currentHeight);
 
     // Draw Axial Load Vector Arrow
-    if (Math.abs(P_kN) > 0) {
+    if (Math.abs(P_N) > 0) {
       const arrowStartX = startX + currentWidth;
-      const arrowLength = Math.min(80, Math.max(30, Math.abs(P_kN) * 0.8));
-      const direction = P_kN > 0 ? 1 : -1; // 1 = outward (Tension), -1 = inward (Compression)
+      const arrowLength = Math.min(80, Math.max(30, Math.abs(P_N) * 0.0008));
+      const direction = P_N > 0 ? 1 : -1; // 1 = outward (Tension), -1 = inward (Compression)
 
-      ctx.strokeStyle = P_kN > 0 ? '#ef4444' : '#3b82f6';
+      ctx.strokeStyle = P_N > 0 ? '#ef4444' : '#3b82f6';
       ctx.fillStyle = ctx.strokeStyle;
       ctx.lineWidth = 4;
 
@@ -277,22 +286,25 @@
 
       // Draw Arrowhead
       ctx.beginPath();
-      const headX = arrowStartX + (arrowLength * direction);
-      ctx.moveTo(headX, centerY);
-      ctx.lineTo(headX - (10 * direction), centerY - 8);
-      ctx.lineTo(headX - (10 * direction), centerY + 8);
+      ctx.headX = arrowStartX + (arrowLength * direction);
+      ctx.moveTo(ctx.headX, centerY);
+      ctx.lineTo(ctx.headX - (10 * direction), centerY - 8);
+      ctx.lineTo(ctx.headX - (10 * direction), centerY + 8);
       ctx.closePath();
       ctx.fill();
     }
   }
 
   // Event listeners for real-time recalculation
-  document.querySelectorAll('input, select').forEach(input => {
+  document.querySelectorAll('input').forEach(input => {
     input.addEventListener('input', calculateAndDraw);
   });
 
   // Render on page load and window resize
   window.addEventListener('resize', calculateAndDraw);
+  
+  // Wait for KaTeX scripts to render formulas initially if needed
+  window.addEventListener('load', calculateAndDraw);
   calculateAndDraw();
 </script>
 

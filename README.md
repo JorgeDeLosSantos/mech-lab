@@ -4,5 +4,6 @@
 
 ## Available SPAs
 
-- [Stress transformation](https://jorgedelossantos.github.io/mech-lab/stress-transformation)
+- [Axial load](https://jorgedelossantos.github.io/mech-lab/axial-load)
 - [Stepped bar under axial load](https://jorgedelossantos.github.io/mech-lab/stepped-bar-axial-load)
+- [Stress transformation](https://jorgedelossantos.github.io/mech-lab/stress-transformation)
